@@ -155,7 +155,7 @@ def create_maps(path_to_pages):
                             possible_locations = findall("(?<={{)[^|}]+", text) + findall("(?<=\[\[)[^|}\]]+", text)
                             possible_locations = [l for l in possible_locations if not any(l.lower().startswith(w) for w in non_starters)]
                             print("possible_locations:", possible_locations)
-
+                            check_output("mysql -u root genesis -e \"SELECT id FROM page_titles WHERE title IN ('" + [l.replace("'","\\'") for l in possible_locations].join("','")]
                             #page_ids = PageProps.objects.filter(pp_propname="displaytitle", pp_value__in=display_titles).values_list("pp_page", flat=True)
                             
                             #print("page_ids:", page_ids)
@@ -188,9 +188,9 @@ def run():
         #load_geotags(ymd)
         path_to_pages = download_if_necessary("https://dumps.wikimedia.org/enwiki/" + ymd + "/enwiki-" + ymd + "-pages-articles.xml.bz2")
         print("path_to_pages:", path_to_pages)
-        #call("mysql -u root genesis -e 'CREATE TABLE page_titles (id int(10), title VARCHAR(200))'", shell=True)
-        #load_page_titles(path_to_pages)
-        create_maps(path_to_pages)
+        call("mysql -u root genesis -e 'CREATE TABLE page_titles (id int(10), title VARCHAR(200))'", shell=True)
+        load_page_titles(path_to_pages)
+        #create_maps(path_to_pages)
         exit()
     except Exception as e:
         print(e)
