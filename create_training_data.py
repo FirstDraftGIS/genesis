@@ -28,17 +28,20 @@ non_starters = ["!", "category", "citation", "cite", "clear", "coat of arms", "c
 def run_sql(sql_statement, debug=False):
     try:
         if debug: print("starting run_sql with:", sql_statement)
+        sql_statement = sql_statement.replace('"', '\\"')
         bash_command = '''mysql -u root genesis -e "''' + sql_statement + '''"'''
         if debug: print("bash_command:", bash_command)
         output = check_output(bash_command, shell=True).decode("utf-8")
         if debug: print("output: " + output)
         # format as rows of dictionary objects
         lines = output.strip().split("\n")
-        header = lines[0].split("\t")
-        if debug: print("header:", header)
-        result = [dict(zip(header, line.split("\t"))) for line in lines[1:]]
-        if debug: print("result:", str(result))
-        return result
+        if lines:
+            header = lines[0].split("\t")
+            if debug: print("header:", header)
+            if len(lines) > 1:
+                result = [dict(zip(header, line.split("\t"))) for line in lines[1:]]
+                if debug: print("result:", str(result))
+                return result
     except Exception as e:
         print("run_sql caught exception " + str(e) + " while trying to run " + sql_statement)
         raise e
@@ -103,8 +106,8 @@ def load_geotags(ymd):
 def clean_title(title):
     return title.replace("'","\\'").replace("`","\\`").replace('"','\\"').rstrip("\\")
 
-def insert_values_into_page_titles(values):
-    print("starting insert_values_into_page_titles with", len(values))
+def insert_values_into_page_titles(values, debug=False):
+    if debug: print("starting insert_values_into_page_titles with " + str(len(values)))
     try:
         run_sql("INSERT INTO page_titles VALUES " + ",".join([ "(" + temp_page_id + ",'" + temp_page_title + "')" for temp_page_id, temp_page_title in values]))
     except Exception as e:
@@ -116,7 +119,7 @@ def insert_values_into_page_titles(values):
             print("half_length:", str(half_length))
             chunks = [ values[:half_length], values[half_length:] ]
             for chunk in chunks:
-                insert_values_into_page_titles(chunk)
+                insert_values_into_page_titles(chunk, debug=True)
 
 def load_page_titles(path_to_pages):
     start = datetime.now()
@@ -223,46 +226,34 @@ def create_maps(path_to_pages, debug_level=1):
                             if possible_locations:
                                 if debug_level == 2: print("possible_locations:", possible_locations)
                                 # may have to chunk up list, so doesn't hit max limit for bash statement
-                                rows = run_sql("SELECT * FROM page_titles WHERE title IN (\'" + "\',\'".join([l.replace("'","\\'").replace("`","\\`").rstrip("\\") for l in possible_locations]) + "\');", debug=False)
-                                pageid_2_title = dict([(row["id"], row["title"]) for row in rows])
-                                if debug_level == 2: print("pageid_2_title:", str(pageid_2_title))
-                                page_ids = [row['id'] for row in rows]
-                                if debug_level == 2: print("page_ids:", page_ids)
+                                rows = run_sql("SELECT * FROM wikiplaces WHERE TITLE IN (\'" + "\',\'".join([clean_title(l) for l in possible_locations]) + "\');", debug=False)
+                                if debug_level == 2: print("rows:", rows)
+                                if rows:
+                                    features = []
+                                    for row in rows:
+                                        geometry = Point((float(row['longitude']), float(row['latitude'])))
+                                        properties = {"title": row['title'], "page_id": row['page_id']}
+                                        features.append(Feature(geometry=geometry, properties=properties))
+                                    feature_collection = FeatureCollection(features)
+                                    map_as_string = geojson_dumps(feature_collection, sort_keys=True)
+                                    if debug_level == 2: print("map_as_string:", map_as_string)
+                                    name_for_file_system = page_id + ("-" + title if len(title) < 25 and len(title) == len([char for char in title if char in ascii_letters]) else "")
+                                    path_to_folder = join(path_to_data, name_for_file_system)
+                                    mkdir(path_to_folder)
 
-                                if page_ids:
-                                    #to-do: investigate if page has at least one gt_primary = 1 and if that's correct
-                                    geo_tags = run_sql("SELECT * FROM geo_tags WHERE gt_primary = 1 AND gt_page_id IN (" + ",".join(page_ids) + ");", debug=False)
-                                    if geo_tags:
-                                        features = []
-                                        for geo_tag in geo_tags:
-                                            geometry = Point((float(geo_tag['gt_lon']), float(geo_tag['gt_lat'])))
-                                            properties = {"title": pageid_2_title[geo_tag["gt_page_id"]]}
-                                            features.append(Feature(geometry=geometry, properties=properties))
-                                        feature_collection = FeatureCollection(features)
-                                        map_as_string = geojson_dumps(feature_collection, sort_keys=True)
-                                        if debug_level == 2: print("map_as_string:", map_as_string)
-                                        name_for_file_system = page_id + ("-" + title if len(title) < 25 and len(title) == len([char for char in title if char in ascii_letters]) else "")
-                                        path_to_folder = join(path_to_data, name_for_file_system)
-                                        mkdir(path_to_folder)
+                                    path_to_map = join(path_to_folder, name_for_file_system + ".geojson")
+                                    if debug_level == 2: print("path_to_map: " + path_to_map)
+                                    with open(path_to_map, "wb") as f:
+                                        f.write(map_as_string.encode("utf-8"))
+                                        if debug_level == 2: print("wrote: " + path_to_map)
 
-                                        path_to_map = join(path_to_folder, name_for_file_system + ".geojson")
-                                        if debug_level == 2: print("path_to_map: " + path_to_map)
-                                        with open(path_to_map, "wb") as f:
-                                            f.write(map_as_string.encode("utf-8"))
-                                            if debug_level == 2: print("wrote: " + path_to_map)
-
-                                        path_to_text = join(path_to_folder, name_for_file_system + ".txt")
-                                        if debug_level == 2: print("path_to_text: " + path_to_text)
-                                        with open(path_to_text, "wb") as f:
-                                            f.write(text.encode("utf-8"))
-                                            if debug_level == 2: print("wrote: " + path_to_text)
+                                    path_to_text = join(path_to_folder, name_for_file_system + ".txt")
+                                    if debug_level == 2: print("path_to_text: " + path_to_text)
+                                    with open(path_to_text, "wb") as f:
+                                        f.write(text.encode("utf-8"))
+                                        if debug_level == 2: print("wrote: " + path_to_text)
 
  
-                            #page_ids = PageProps.objects.filter(pp_propname="displaytitle", pp_value__in=display_titles).values_list("pp_page", flat=True)
-                            
-                            #print("page_ids:", page_ids)
-                            #geo_tags = GeoTags.objects.filter(gt_page_id__in=page_ids)
-                            #print("geo_tags:", geo_tags)
                         in_text = False
                         page_id = None
                         possible_locations = None
@@ -292,16 +283,24 @@ def create_maps(path_to_pages, debug_level=1):
 
 def create_wiki_places(): 
     print("starting create_wiki_places")
+    filepath = "/tmp/wikiplaces.tsv"
+    #if isfile(filepath): remove(filepath)
+    run_sql("DROP TABLE wikiplaces", debug=True)
     run_sql("""
-        SELECT title, gt_lat, gt_lon
+        CREATE TABLE wikiplaces AS
+        SELECT gt_page_id AS page_id, title, gt_lat AS latitude, gt_lon AS longitude
         FROM page_titles
         INNER JOIN geo_tags
-        ON page_titles.id = geo_tags.gt_page_id
-        WHERE gt_primary = 1
+        ON page_titles.id = geo_tags.gt_page_id;
+    """, debug=True)
+ 
+    run_sql("""
+        SELECT *
+        FROM wikiplaces
         INTO OUTFILE '/tmp/wikiplaces.tsv'
         FIELDS TERMINATED BY '\t'
         ENCLOSED BY '"'
-        LINES TERMINATED BY '\n'
+        LINES TERMINATED BY '\n';
     """, debug=True)
     print("finishing create_wiki_places")
 
@@ -311,29 +310,28 @@ def run():
         start = datetime.now()
         ymd, jobs = get_most_recent_available_dump()
         call("mysql -u root -e 'CREATE USER IF NOT EXISTS ubuntu'", shell=True)
-        call("mysql -u root -e 'DROP DATABASE genesis'", shell=True)
+        #call("mysql -u root -e 'DROP DATABASE genesis'", shell=True)
         call("mysql -u root -e 'CREATE DATABASE IF NOT EXISTS genesis DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_unicode_ci'", shell=True)
 
-        load_geotags(ymd)
+        #load_geotags(ymd)
+        run_sql("DELETE FROM geo_tags WHERE gt_primary != 1;", debug=True)
 
         path_to_pages = download_if_necessary("https://dumps.wikimedia.org/enwiki/" + ymd + "/enwiki-" + ymd + "-pages-articles.xml.bz2")
         print("path_to_pages:", path_to_pages)
-        call("mysql -u root genesis -e 'DROP TABLE IF EXISTS page_titles'", shell=True)
-        call("mysql -u root genesis -e 'CREATE TABLE IF NOT EXISTS page_titles (id int(10), title VARCHAR(500))'", shell=True)
+        #run_sql("DROP TABLE IF EXISTS page_titles", debug=True)
+        run_sql("CREATE TABLE IF NOT EXISTS page_titles (id int(10), title VARCHAR(500))", debug=True)
 
-        #print("testing loading of titles") 
-        path_to_titles = download_if_necessary("https://dumps.wikimedia.org/enwiki/" + ymd + "/enwiki-" + ymd + "-all-titles.gz", debug=True)
-        print("path_to_titles:", path_to_titles)
+        #path_to_titles = download_if_necessary("https://dumps.wikimedia.org/enwiki/" + ymd + "/enwiki-" + ymd + "-all-titles.gz", debug=True)
+        #print("path_to_titles:", path_to_titles)
         #load_test_page_titles(path_to_titles)
 
 
-        load_page_titles(path_to_pages)
-        create_wiki_places()
-
+        #load_page_titles(path_to_pages)
+        #create_wiki_places()
         
         
-        create_maps(path_to_pages)
-        call("zip -r genesis.zip genesis", cwd="/tmp/", shell=True)
+        create_maps(path_to_pages, debug_level=1)
+        #call("zip -r genesis.zip genesis", cwd="/tmp/", shell=True)
     except Exception as e:
         print(e)
 
