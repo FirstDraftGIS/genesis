@@ -1,2 +1,7 @@
+awscli
+boto
 broth
 geojson
+requests
+sparqlwrapper
+wake

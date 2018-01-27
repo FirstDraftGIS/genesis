@@ -1,0 +1,25 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: python:latest
+    steps:
+      - checkout
+      - run:
+          name: Install Python Packages
+          command: pip3 install -r requirements.txt
+      - run:
+          name: Build Data
+          command: python3 create_data.py
+      - run:
+          name: Test
+          command: echo "will write tests later"
+      - run:
+          name: Zip
+          command: cd /tmp && zip -r genesis.zip genesis
+      - run:
+          name: Install AWS CLI
+          command: pip install awscli --upgrade
+      - run:
+          name: copy into s3 bucket
+          command: aws s3 cp /tmp/genesis.zip s3://firstdraftgis/genesis.zip
