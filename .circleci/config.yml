@@ -6,6 +6,9 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Update Package Lists
+          command: apt-get update -qq      
+      - run:
           name: Install Python Packages
           command: pip3 install -r requirements.txt
       - run:
