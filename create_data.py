@@ -65,7 +65,15 @@ def run():
 
         title2coords = load_coordinates_dictionary()
 
+        page_count = 0
+
         for page in get_english_wikipedia_pages():
+            
+            page_count += 1
+            
+            if page_count % 100000 == 0:
+                print("page_count:", page_count)
+            
             #print("page:", page)
             
             page_id = page.find("id").text
@@ -75,7 +83,7 @@ def run():
             page_text = page.find("revision/text").text
             #print("page_text:", page_text)
 
-            if page_id and page_title and page_title:
+            if page_id and page_title and page_text:
                 if page_title not in blacklist and not page_text.startswith("#REDIRECT"):
                     #print("page_id:", page_title)
 
