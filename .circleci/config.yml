@@ -15,6 +15,9 @@ jobs:
           name: Test
           command: echo "will write tests later"
       - run:
+          name: Install System Dependencies
+          command: apt-get install -y zip
+      - run:
           name: Zip
           command: cd /tmp && zip -r genesis.zip genesis
       - run:
