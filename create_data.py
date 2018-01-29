@@ -28,7 +28,7 @@ from wake import get_english_wikipedia_pages
 blacklist = ["User talk:", "Talk:", "Comments:", "User:", "File:", "Category:", "Wikinews:", "Template:", "Category talk:", "MediaWiki:", "User:"]
 non_starters = ["!", "category", "citation", "cite", "clear", "coat of arms", "collapsible", "convert", "dead", "default", "file", "flag", "flagicon", "formatnum",  "image", "incomplete", "infobox", "isbn", "lang", "main", "nomorelinks", "quote", "redirect", "see also", "template", "term-stub", "transl", "un_population", "update", "utc", "webarchive", "wikipedia", "wikt"]
 
-def load_coordinates_dictionary():
+def load_coordinates_dictionary(save_json=False):
     
     path_to_json = "/tmp/title2coords.json"
     if isfile(path_to_json):
@@ -48,8 +48,9 @@ def load_coordinates_dictionary():
             title2coords[line["enwiki_title"]] = line
     print("title2coords loaded")
     
-    with open(path_to_json, "w") as f:
-        f.write(json.dumps(title2coords))
+    if save_json:
+        with open(path_to_json, "w") as f:
+            f.write(json.dumps(title2coords))
     
     return title2coords
 
