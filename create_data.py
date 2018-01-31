@@ -117,8 +117,6 @@ def quick_run():
                             output_writer = writer(f, delimiter="\t", quoting=QUOTE_ALL)
                             output_writer.writerow([page_id, ";".join(list(places_in_text))])
                         
-        output_file.close()
-          
     except Exception as e:
         print(e)
 
